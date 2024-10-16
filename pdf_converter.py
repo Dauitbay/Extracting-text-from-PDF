@@ -13,15 +13,33 @@ def extract_pdf_structure(pdf_file_path: str):
     structure = {}
     count_chapters = 0
 
-    for item in toc:
+    for i, item in enumerate(toc):
         level, title, page_num = item
+
         if "Глава" in title:
             count_chapters += 1
             continue
         else:
-            add_to_structure(structure, level, title, count_chapters)
+            if i + 1 < len(toc):
+                next_page_num = toc[i + 1][2] - 1
+            else:
+                next_page_num = doc.page_count - 1
+
+            add_to_structure(doc, structure, level, title, count_chapters, page_num, next_page_num)
     doc.close()
     return structure
+
+
+def extract_text(doc, start_page, end_page, title):
+    text = ""
+    for page_num in range(start_page, end_page + 1):
+        page = doc.load_page(page_num)
+        text += page.get_text("text")
+    if title in text:
+        print(title)
+        text = text.replace(title, "")
+    # print(text.strip())
+    return text.strip()
 
 
 def extract_text_after_number(title: str):
@@ -42,10 +60,13 @@ def is_valid_section_number(number: str):
     return bool(re.match(r'^\d+(\.\d+)*$', number))
 
 
-def add_to_structure(structure: dict, level: int, title: str, count_chapter: int):
+def add_to_structure(doc, structure: dict, level: int, title: str, count_chapter: int, start_page, end_page):
+    text = extract_text(doc, start_page - 1, end_page - 1, title)
+    text_length = len(text)
 
     if level == 1:
-        structure[count_chapter] = {'title': title, 'sections': {}}
+
+        structure[count_chapter] = {'title': title, 'sections': {}, 'text': text, 'length': text_length}
     elif level == 2:
         numbers = extract_number(title)
         if is_valid_section_number(numbers):
@@ -54,7 +75,8 @@ def add_to_structure(structure: dict, level: int, title: str, count_chapter: int
             last_chapter = list(structure.keys())[-1]
             if chapter_key in structure[last_chapter]['sections']:
                 chapter_key = f"{numbers}."
-            structure[last_chapter]['sections'][chapter_key] = {'title': string_part, 'subsections': {}}
+            structure[last_chapter]['sections'][chapter_key] = {'title': string_part, 'subsections': {}, 'text': text,
+                                                                'length': text_length}
 
     elif level == 3:
         numbers = extract_number(title)
@@ -66,12 +88,15 @@ def add_to_structure(structure: dict, level: int, title: str, count_chapter: int
                 last_section = list(structure[last_chapter]['sections'].keys())[-1]
                 if chapter_key in structure[last_chapter]['sections'][last_section]['subsections']:
                     chapter_key = f"{numbers}."
-                structure[last_chapter]['sections'][last_section]['subsections'][chapter_key] = {'title': string_part, 'subsections': {}}
+                structure[last_chapter]['sections'][last_section]['subsections'][chapter_key] = {'title': string_part,
+                                                                                                 'text': text,
+                                                                                                 'length': text_length}
+                # structure[last_chapter]['sections'][last_section]['subsections'][chapter_key] = {'title': string_part, 'subsections': {}}
     return structure
 
 
 def save_to_json(data):
-    with open("structure_result.json", 'w', encoding='utf-8') as f:
+    with open("Full_structure_result.json", 'w', encoding='utf-8') as f:
         json.dump(data, f, ensure_ascii=False, indent=4)
 
 
